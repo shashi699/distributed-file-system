@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.util.List;
 
 import com.shashi.distributedfilesystem.model.RenameRequest;
+import com.shashi.distributedfilesystem.exception.FileNotFoundException;
 
 @RestController
 
@@ -91,12 +92,11 @@ public class FileController {
                         .orElse(null);
 
         if (metadata == null) {
-            return new ApiResponse(
-                    "FAILED",
-                    "File not found",
-                    oldFileName
+            throw new FileNotFoundException(
+                    "File not found: " + oldFileName
             );
         }
+        
         String oldStoredFileName = metadata.getStoredFileName();
 
         String uuid = oldStoredFileName.substring(

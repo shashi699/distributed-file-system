@@ -20,6 +20,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
 
+import com.shashi.distributedfilesystem.exception.FileNotFoundException;
+
 @Service
 public class FileStorageService {
 
@@ -78,7 +80,7 @@ public class FileStorageService {
         Resource resource = new UrlResource(filePath.toUri());
 
         if (!resource.exists()) {
-            throw new RuntimeException("File not found: " + fileName);
+            throw new FileNotFoundException("File not found: " + fileName);
         }
 
         return resource;
@@ -108,11 +110,8 @@ public class FileStorageService {
             );
         }
 
-        return new ApiResponse(
-                "FAILED",
-                "File not found",
-                fileName
-        );
+        throw new FileNotFoundException("File not found: " + fileName);
+        
     }
     public String renameFile(String oldStoredFileName, String newStoredFileName)
             throws IOException {
