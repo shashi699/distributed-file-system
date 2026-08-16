@@ -3,6 +3,8 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import com.shashi.distributedfilesystem.model.ApiResponse;
 import com.shashi.distributedfilesystem.service.FileStorageService;
+import com.shashi.distributedfilesystem.service.MetadataService;
+import com.shashi.distributedfilesystem.model.FileMetadata;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -11,6 +13,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import java.io.IOException;
 import java.util.List;
+
+import com.shashi.distributedfilesystem.model.RenameRequest;
 
 @RestController
 
@@ -48,6 +52,8 @@ public class FileController {
 
     @Autowired
     private FileStorageService fileStorageService;
+    @Autowired
+    private MetadataService metadataService;
 
     @PostMapping("/upload")
     public ApiResponse uploadFile(@RequestParam("file") MultipartFile file)
@@ -55,5 +61,69 @@ public class FileController {
 
         return fileStorageService.saveFile(file);
     }
+    @GetMapping("/metadata/{storedFileName}")
+    public ResponseEntity<FileMetadata> getMetadata(
+            @PathVariable String storedFileName) {
 
+        FileMetadata metadata =
+                metadataService.getMetadata(storedFileName);
+
+        if (metadata == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(metadata);
+    }
+    @GetMapping("/search")
+    public List<FileMetadata> searchFiles(@RequestParam String name) {
+
+        return metadataService.searchMetadata(name);
+    }
+    @PutMapping("/rename")
+    public ApiResponse renameFile(@RequestBody RenameRequest request)
+            throws IOException {
+
+        String oldFileName = request.getOldFileName();
+        String newFileName = request.getNewFileName();
+
+        FileMetadata metadata =
+                metadataService.findMetadataByOriginalName(oldFileName)
+                        .orElse(null);
+
+        if (metadata == null) {
+            return new ApiResponse(
+                    "FAILED",
+                    "File not found",
+                    oldFileName
+            );
+        }
+        String oldStoredFileName = metadata.getStoredFileName();
+
+        String uuid = oldStoredFileName.substring(
+                0,
+                oldStoredFileName.indexOf("_")
+        );
+
+        String newStoredFileName = uuid + "_" + newFileName;
+
+        fileStorageService.renameFile(
+                oldStoredFileName,
+                newStoredFileName
+        );
+
+        metadata.setOriginalFileName(newFileName);
+        metadata.setStoredFileName(newStoredFileName);
+
+        metadataService.updateStoredFileName(
+                oldStoredFileName,
+                newStoredFileName,
+                metadata
+        );
+
+        return new ApiResponse(
+                "SUCCESS",
+                "File renamed successfully",
+                newFileName
+        );
+    }
 }

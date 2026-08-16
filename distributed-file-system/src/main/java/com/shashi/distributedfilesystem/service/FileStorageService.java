@@ -4,7 +4,6 @@ package com.shashi.distributedfilesystem.service;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 
-
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -13,18 +12,25 @@ import java.net.MalformedURLException;
 import com.shashi.distributedfilesystem.model.ApiResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-
+import com.shashi.distributedfilesystem.model.FileMetadata;
+import java.time.LocalDateTime;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.UUID;
 
 @Service
 public class FileStorageService {
 
+    private final MetadataService metadataService;
+
     private static final Path UPLOAD_DIR =
             Paths.get(System.getProperty("user.dir"), "uploads");
 
+    public FileStorageService(MetadataService metadataService) {
+        this.metadataService = metadataService;
+    }
 
     public ApiResponse saveFile(MultipartFile file) throws IOException {
         if (file.isEmpty()) {
@@ -39,15 +45,31 @@ public class FileStorageService {
 
         Files.createDirectories(UPLOAD_DIR);
 
-        Path destination = UPLOAD_DIR.resolve(file.getOriginalFilename());
+        String uniqueFileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+
+        Path destination = UPLOAD_DIR.resolve(uniqueFileName);
 
         file.transferTo(destination);
 
-        return new ApiResponse(
+        FileMetadata metadata = new FileMetadata(
+                file.getOriginalFilename(),
+                uniqueFileName,
+                file.getSize(),
+                file.getContentType(),
+                LocalDateTime.now()
+        );
+
+        metadataService.saveMetadata(metadata);
+
+        ApiResponse response = new ApiResponse(
                 "SUCCESS",
                 "File uploaded successfully",
                 file.getOriginalFilename()
         );
+
+        response.setMetadata(metadata);
+
+        return response;
     }
     public Resource downloadFile(String fileName) throws MalformedURLException {
 
@@ -91,5 +113,19 @@ public class FileStorageService {
                 "File not found",
                 fileName
         );
+    }
+    public String renameFile(String oldStoredFileName, String newStoredFileName)
+            throws IOException {
+
+        Path oldPath = UPLOAD_DIR.resolve(oldStoredFileName);
+        Path newPath = UPLOAD_DIR.resolve(newStoredFileName);
+
+        if (!Files.exists(oldPath)) {
+            throw new RuntimeException("File not found: " + oldStoredFileName);
+        }
+
+        Files.move(oldPath, newPath);
+
+        return newStoredFileName;
     }
 }

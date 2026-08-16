@@ -5,7 +5,7 @@ public class ApiResponse {
     private String status;
     private String message;
     private String fileName;
-
+    private FileMetadata metadata;
     public ApiResponse() {
     }
 
@@ -21,6 +21,14 @@ public class ApiResponse {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public FileMetadata getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(FileMetadata metadata) {
+        this.metadata = metadata;
     }
 
     public String getMessage() {
