@@ -3,6 +3,10 @@ package com.shashi.distributedfilesystem.service;
 import com.shashi.distributedfilesystem.model.FileMetadata;
 import org.springframework.stereotype.Service;
 
+import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
+import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
+import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -15,24 +19,34 @@ import java.util.Optional;
 public class MetadataService {
 
     private final Map<String, FileMetadata> metadataStore = new HashMap<>();
+    private final DynamoDbTable<FileMetadata> metadataTable;
 
     public void saveMetadata(FileMetadata metadata) {
 
-        metadataStore.put(
-                metadata.getStoredFileName(),
-                metadata
-        );
-
+        metadataTable.putItem(metadata);
     }
 
+    public MetadataService(DynamoDbEnhancedClient enhancedClient) {
 
-    public FileMetadata getMetadata(String storedFileName) {
-        return metadataStore.get(storedFileName);
+        this.metadataTable = enhancedClient.table(
+                "Filemetadata",
+                TableSchema.fromBean(FileMetadata.class)
+        );
+    }
+
+    public FileMetadata getMetadata(String fileId) {
+
+        return metadataTable.getItem(
+                r -> r.key(
+                        k -> k.partitionValue(fileId)
+                )
+        );
     }
 
     public List<FileMetadata> searchMetadata(String name) {
 
-        return metadataStore.values()
+        return metadataTable.scan()
+                .items()
                 .stream()
                 .filter(metadata ->
                         metadata.getOriginalFileName()
@@ -42,16 +56,17 @@ public class MetadataService {
                 .collect(Collectors.toList());
     }
 
-
     public Optional<FileMetadata> findMetadataByOriginalName(String oldFileName) {
 
-        return metadataStore.values()
+        return metadataTable.scan()
+                .items()
                 .stream()
                 .filter(metadata ->
                         metadata.getOriginalFileName().equals(oldFileName)
                 )
                 .findFirst();
     }
+
     public FileMetadata renameMetadata(String oldFileName, String newFileName) {
 
         Optional<FileMetadata> metadataOptional =
@@ -65,15 +80,15 @@ public class MetadataService {
 
         metadata.setOriginalFileName(newFileName);
 
+        metadataTable.putItem(metadata);
+
         return metadata;
     }
+
     public void updateStoredFileName(
-            String oldStoredFileName,
-            String newStoredFileName,
+            String fileId,
             FileMetadata metadata) {
 
-        metadataStore.remove(oldStoredFileName);
-
-        metadataStore.put(newStoredFileName, metadata);
+        metadataTable.putItem(metadata);
     }
 }

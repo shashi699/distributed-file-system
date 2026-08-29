@@ -47,13 +47,16 @@ public class FileStorageService {
 
         Files.createDirectories(UPLOAD_DIR);
 
-        String uniqueFileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+        String fileId = UUID.randomUUID().toString();
+
+        String uniqueFileName = fileId + "_" + file.getOriginalFilename();
 
         Path destination = UPLOAD_DIR.resolve(uniqueFileName);
 
         file.transferTo(destination);
 
-        FileMetadata metadata = new FileMetadata(
+        FileMetadata metadata =  new FileMetadata(
+                fileId,
                 file.getOriginalFilename(),
                 uniqueFileName,
                 file.getSize(),
@@ -111,7 +114,7 @@ public class FileStorageService {
         }
 
         throw new FileNotFoundException("File not found: " + fileName);
-        
+
     }
     public String renameFile(String oldStoredFileName, String newStoredFileName)
             throws IOException {
@@ -120,7 +123,9 @@ public class FileStorageService {
         Path newPath = UPLOAD_DIR.resolve(newStoredFileName);
 
         if (!Files.exists(oldPath)) {
-            throw new RuntimeException("File not found: " + oldStoredFileName);
+            throw new FileNotFoundException(
+                    "File not found: " + oldStoredFileName
+            );
         }
 
         Files.move(oldPath, newPath);

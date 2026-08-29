@@ -62,12 +62,12 @@ public class FileController {
 
         return fileStorageService.saveFile(file);
     }
-    @GetMapping("/metadata/{storedFileName}")
+    @GetMapping("/metadata/{fileId}")
     public ResponseEntity<FileMetadata> getMetadata(
-            @PathVariable String storedFileName) {
+            @PathVariable String fileId) {
 
         FileMetadata metadata =
-                metadataService.getMetadata(storedFileName);
+                metadataService.getMetadata(fileId);
 
         if (metadata == null) {
             return ResponseEntity.notFound().build();
@@ -96,7 +96,7 @@ public class FileController {
                     "File not found: " + oldFileName
             );
         }
-        
+
         String oldStoredFileName = metadata.getStoredFileName();
 
         String uuid = oldStoredFileName.substring(
@@ -115,8 +115,7 @@ public class FileController {
         metadata.setStoredFileName(newStoredFileName);
 
         metadataService.updateStoredFileName(
-                oldStoredFileName,
-                newStoredFileName,
+                metadata.getFileId(),
                 metadata
         );
 
