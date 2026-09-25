@@ -7,24 +7,15 @@ import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 
-import java.util.HashMap;
-import java.util.Map;
 
 import java.util.List;
 import java.util.stream.Collectors;
-
 import java.util.Optional;
 
 @Service
 public class MetadataService {
 
-    private final Map<String, FileMetadata> metadataStore = new HashMap<>();
     private final DynamoDbTable<FileMetadata> metadataTable;
-
-    public void saveMetadata(FileMetadata metadata) {
-
-        metadataTable.putItem(metadata);
-    }
 
     public MetadataService(DynamoDbEnhancedClient enhancedClient) {
 
@@ -34,6 +25,19 @@ public class MetadataService {
         );
     }
 
+    // ---------------------------------------------------------
+    // SAVE METADATA
+    // ---------------------------------------------------------
+
+    public void saveMetadata(FileMetadata metadata) {
+
+        metadataTable.putItem(metadata);
+    }
+
+    // ---------------------------------------------------------
+    // GET METADATA BY FILE ID
+    // ---------------------------------------------------------
+
     public FileMetadata getMetadata(String fileId) {
 
         return metadataTable.getItem(
@@ -42,6 +46,10 @@ public class MetadataService {
                 )
         );
     }
+
+    // ---------------------------------------------------------
+    // SEARCH METADATA BY ORIGINAL FILE NAME
+    // ---------------------------------------------------------
 
     public List<FileMetadata> searchMetadata(String name) {
 
@@ -56,18 +64,30 @@ public class MetadataService {
                 .collect(Collectors.toList());
     }
 
-    public Optional<FileMetadata> findMetadataByOriginalName(String oldFileName) {
+    // ---------------------------------------------------------
+    // FIND METADATA BY ORIGINAL FILE NAME
+    // ---------------------------------------------------------
+
+    public Optional<FileMetadata> findMetadataByOriginalName(
+            String oldFileName) {
 
         return metadataTable.scan()
                 .items()
                 .stream()
                 .filter(metadata ->
-                        metadata.getOriginalFileName().equals(oldFileName)
+                        metadata.getOriginalFileName()
+                                .equals(oldFileName)
                 )
                 .findFirst();
     }
 
-    public FileMetadata renameMetadata(String oldFileName, String newFileName) {
+    // ---------------------------------------------------------
+    // RENAME METADATA
+    // ---------------------------------------------------------
+
+    public FileMetadata renameMetadata(
+            String oldFileName,
+            String newFileName) {
 
         Optional<FileMetadata> metadataOptional =
                 findMetadataByOriginalName(oldFileName);
@@ -85,10 +105,52 @@ public class MetadataService {
         return metadata;
     }
 
+    // ---------------------------------------------------------
+    // UPDATE STORED FILE NAME
+    // ---------------------------------------------------------
+
     public void updateStoredFileName(
             String fileId,
             FileMetadata metadata) {
 
         metadataTable.putItem(metadata);
+    }
+
+    // ---------------------------------------------------------
+    // FIND METADATA BY STORED FILE NAME
+    // ---------------------------------------------------------
+
+    public Optional<FileMetadata> findMetadataByStoredFileName(
+            String storedFileName) {
+
+        return metadataTable.scan()
+                .items()
+                .stream()
+                .filter(metadata ->
+                        metadata.getStoredFileName()
+                                .equals(storedFileName)
+                )
+                .findFirst();
+    }
+
+    // ---------------------------------------------------------
+    // DELETE METADATA
+    // ---------------------------------------------------------
+
+    public void deleteMetadata(String fileId) {
+
+        metadataTable.deleteItem(
+                r -> r.key(
+                        k -> k.partitionValue(fileId)
+                )
+        );
+    }
+
+    public List<String> getAllFileNames() {
+        return metadataTable.scan()
+                .items()
+                .stream()
+                .map(FileMetadata::getOriginalFileName)
+                .collect(Collectors.toList());
     }
 }

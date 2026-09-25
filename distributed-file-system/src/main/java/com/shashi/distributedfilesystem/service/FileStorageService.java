@@ -1,23 +1,14 @@
-
-
 package com.shashi.distributedfilesystem.service;
+
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
-
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import java.net.MalformedURLException;
 import com.shashi.distributedfilesystem.model.ApiResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import com.shashi.distributedfilesystem.model.FileMetadata;
 import java.time.LocalDateTime;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.UUID;
 
 import com.shashi.distributedfilesystem.exception.FileNotFoundException;
@@ -26,15 +17,18 @@ import com.shashi.distributedfilesystem.exception.FileNotFoundException;
 public class FileStorageService {
 
     private final MetadataService metadataService;
+    private final S3StorageService s3StorageService;
 
-    private static final Path UPLOAD_DIR =
-            Paths.get(System.getProperty("user.dir"), "uploads");
+    public FileStorageService(
+            MetadataService metadataService,
+            S3StorageService s3StorageService) {
 
-    public FileStorageService(MetadataService metadataService) {
         this.metadataService = metadataService;
+        this.s3StorageService = s3StorageService;
     }
 
     public ApiResponse saveFile(MultipartFile file) throws IOException {
+
         if (file.isEmpty()) {
             throw new RuntimeException("Cannot upload an empty file.");
         }
@@ -45,17 +39,19 @@ public class FileStorageService {
             throw new RuntimeException("File size exceeds 5 MB.");
         }
 
-        Files.createDirectories(UPLOAD_DIR);
-
         String fileId = UUID.randomUUID().toString();
 
-        String uniqueFileName = fileId + "_" + file.getOriginalFilename();
+        String uniqueFileName =
+                fileId + "_" + file.getOriginalFilename();
 
-        Path destination = UPLOAD_DIR.resolve(uniqueFileName);
+        // Upload file to S3
+        s3StorageService.uploadFile(
+                file,
+                uniqueFileName
+        );
 
-        file.transferTo(destination);
-
-        FileMetadata metadata =  new FileMetadata(
+        // Save metadata to DynamoDB
+        FileMetadata metadata = new FileMetadata(
                 fileId,
                 file.getOriginalFilename(),
                 uniqueFileName,
@@ -76,60 +72,65 @@ public class FileStorageService {
 
         return response;
     }
-    public Resource downloadFile(String fileName) throws MalformedURLException {
 
-        Path filePath = UPLOAD_DIR.resolve(fileName).normalize();
+    public Resource downloadFile(String storedFileName) {
 
-        Resource resource = new UrlResource(filePath.toUri());
+        try {
 
-        if (!resource.exists()) {
-            throw new FileNotFoundException("File not found: " + fileName);
-        }
+            java.io.InputStream inputStream =
+                    s3StorageService.downloadFile(storedFileName);
 
-        return resource;
-    }
-    public List<String> listFiles() throws IOException {
-
-        try (Stream<Path> paths = Files.list(UPLOAD_DIR)) {
-
-            return paths
-                    .filter(Files::isRegularFile)
-                    .map(path -> path.getFileName().toString())
-                    .collect(Collectors.toList());
-        }
-    }
-    public ApiResponse deleteFile(String fileName) throws IOException {
-
-        Path filePath = UPLOAD_DIR.resolve(fileName);
-
-        if (Files.exists(filePath)) {
-
-            Files.delete(filePath);
-
-            return new ApiResponse(
-                    "SUCCESS",
-                    "File deleted successfully",
-                    fileName
+            return new org.springframework.core.io.InputStreamResource(
+                    inputStream
             );
-        }
 
-        throw new FileNotFoundException("File not found: " + fileName);
+        } catch (Exception e) {
 
-    }
-    public String renameFile(String oldStoredFileName, String newStoredFileName)
-            throws IOException {
-
-        Path oldPath = UPLOAD_DIR.resolve(oldStoredFileName);
-        Path newPath = UPLOAD_DIR.resolve(newStoredFileName);
-
-        if (!Files.exists(oldPath)) {
             throw new FileNotFoundException(
-                    "File not found: " + oldStoredFileName
+                    "File not found in S3: " + storedFileName
+            );
+        }
+    }
+
+    public List<String> listFiles() {
+        return metadataService.getAllFileNames();
+    }
+
+    public ApiResponse deleteFile(String fileName) {
+
+        // Find metadata using the stored filename
+        FileMetadata metadata = metadataService
+                .findMetadataByStoredFileName(fileName)
+                .orElse(null);
+
+        if (metadata == null) {
+            throw new FileNotFoundException(
+                    "File not found: " + fileName
             );
         }
 
-        Files.move(oldPath, newPath);
+        // Delete file from S3
+        s3StorageService.deleteFile(fileName);
 
-        return newStoredFileName;
+        // Delete metadata from DynamoDB
+        metadataService.deleteMetadata(
+                metadata.getFileId()
+        );
+
+        return new ApiResponse(
+                "SUCCESS",
+                "File deleted successfully",
+                fileName
+        );
+    }
+
+    public void renameFile(
+            String oldStoredFileName,
+            String newStoredFileName) {
+
+        s3StorageService.renameFile(
+                oldStoredFileName,
+                newStoredFileName
+        );
     }
 }

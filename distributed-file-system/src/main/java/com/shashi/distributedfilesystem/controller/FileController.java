@@ -84,27 +84,21 @@ public class FileController {
     public ApiResponse renameFile(@RequestBody RenameRequest request)
             throws IOException {
 
-        String oldFileName = request.getOldFileName();
+        String fileId = request.getFileId();
         String newFileName = request.getNewFileName();
 
         FileMetadata metadata =
-                metadataService.findMetadataByOriginalName(oldFileName)
-                        .orElse(null);
+                metadataService.getMetadata(fileId);
 
         if (metadata == null) {
             throw new FileNotFoundException(
-                    "File not found: " + oldFileName
+                    "File not found with ID: " + fileId
             );
         }
 
         String oldStoredFileName = metadata.getStoredFileName();
 
-        String uuid = oldStoredFileName.substring(
-                0,
-                oldStoredFileName.indexOf("_")
-        );
-
-        String newStoredFileName = uuid + "_" + newFileName;
+        String newStoredFileName = fileId + "_" + newFileName;
 
         fileStorageService.renameFile(
                 oldStoredFileName,
@@ -115,7 +109,7 @@ public class FileController {
         metadata.setStoredFileName(newStoredFileName);
 
         metadataService.updateStoredFileName(
-                metadata.getFileId(),
+                fileId,
                 metadata
         );
 
